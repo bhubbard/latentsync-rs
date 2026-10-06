@@ -50,3 +50,8 @@ wandb/
 !/docs/*
 !/internal/*.png
 .cog/
+
+# Rust artifacts
+target/
+coverage_report/
+lcov.info
