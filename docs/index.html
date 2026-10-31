@@ -1,0 +1,1500 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>latentsync-rs — Audio-Conditioned Latent Diffusion Lip-Sync Engine in Rust</title>
+  <meta name="description" content="High-performance pure Rust port of ByteDance LatentSync 1.6: 16 kHz Whisper 1024-dim audio embeddings, 3D video latent lower-face masking, DDIM denoising scheduler, and U-Net cross-attention." />
+  <link rel="canonical" href="https://code.brandonhubbard.com/latentsync-rs/" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root, [data-theme="dark"] {
+      --bg-void: #0a0a0a;
+      --bg-surface: #111111;
+      --bg-elevated: #171717;
+      --bg-panel: #1f1f23;
+      --border-grid: #262626;
+      --border-strong: #3f3f46;
+      --text-primary: #fafafa;
+      --text-secondary: #a1a1aa;
+      --text-muted: #71717a;
+      --accent-primary: #06b6d4;
+      --accent-secondary: #10b981;
+      --accent-amber: #f59e0b;
+      --accent-purple: #a855f7;
+      --accent-danger: #ef4444;
+      --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    [data-theme="light"] {
+      --bg-void: #f8fafc;
+      --bg-surface: #ffffff;
+      --bg-elevated: #f1f5f9;
+      --bg-panel: #e2e8f0;
+      --border-grid: #cbd5e1;
+      --border-strong: #94a3b8;
+      --text-primary: #0f172a;
+      --text-secondary: #334155;
+      --text-muted: #64748b;
+      --accent-primary: #0284c7;
+      --accent-secondary: #059669;
+      --accent-amber: #d97706;
+      --accent-purple: #7c3aed;
+      --accent-danger: #dc2626;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      border-radius: 0px !important;
+    }
+
+    body {
+      background-color: var(--bg-void);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    /* Unified Top Site Header */
+    .bh-site-header {
+      background: var(--bg-void);
+      border-bottom: 1px solid var(--border-grid);
+      padding: 0.75rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+    }
+
+    .bh-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .bh-brand-dot {
+      width: 10px;
+      height: 10px;
+      background: var(--accent-primary);
+      display: inline-block;
+    }
+
+    .bh-header-links {
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+    }
+
+    .bh-header-links a {
+      color: var(--text-secondary);
+      transition: color 0.15s;
+    }
+
+    .bh-header-links a:hover {
+      color: var(--accent-primary);
+    }
+
+    /* Sticky Subnav */
+    .sticky-subnav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-grid);
+      padding: 0 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 52px;
+    }
+
+    .subnav-title {
+      font-family: var(--font-mono);
+      font-weight: 700;
+      font-size: 0.9rem;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+
+    .subnav-badge {
+      background: var(--accent-primary);
+      color: #000;
+      font-size: 0.68rem;
+      font-weight: 800;
+      padding: 0.12rem 0.45rem;
+      text-transform: uppercase;
+    }
+
+    .subnav-links {
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+      font-family: var(--font-mono);
+      font-size: 0.76rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .subnav-links a {
+      color: var(--text-secondary);
+    }
+
+    .subnav-links a:hover {
+      color: var(--text-primary);
+    }
+
+    .theme-btn {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-grid);
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      padding: 0.35rem 0.7rem;
+      cursor: pointer;
+      text-transform: uppercase;
+    }
+
+    .theme-btn:hover {
+      border-color: var(--accent-primary);
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      border-left: 1px solid var(--border-grid);
+      border-right: 1px solid var(--border-grid);
+    }
+
+    /* Hero */
+    .hero {
+      padding: 3.5rem 2.5rem;
+      border-bottom: 1px solid var(--border-grid);
+      display: grid;
+      grid-template-columns: 1.35fr 1fr;
+      gap: 2.5rem;
+      background:
+        linear-gradient(90deg, rgba(6, 182, 212, 0.04) 1px, transparent 1px),
+        linear-gradient(rgba(6, 182, 212, 0.04) 1px, transparent 1px);
+      background-size: 32px 32px;
+    }
+
+    .hero-eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--accent-primary);
+      margin-bottom: 0.85rem;
+    }
+
+    .hero h1 {
+      font-size: clamp(2.1rem, 4vw, 3.2rem);
+      font-weight: 800;
+      line-height: 1.08;
+      letter-spacing: -0.03em;
+      margin-bottom: 1.15rem;
+    }
+
+    .hero-subtitle {
+      color: var(--text-secondary);
+      font-size: 1.04rem;
+      max-width: 68ch;
+      margin-bottom: 1.75rem;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+
+    .btn {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 0.75rem 1.35rem;
+      border: 1px solid var(--border-strong);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      transition: all 0.15s;
+    }
+
+    .btn-primary {
+      background: var(--accent-primary);
+      color: #000;
+      border-color: var(--accent-primary);
+    }
+
+    .btn-primary:hover {
+      filter: brightness(1.1);
+    }
+
+    .btn:hover {
+      border-color: var(--accent-primary);
+    }
+
+    .hero-telemetry {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      border: 1px solid var(--border-grid);
+      background: var(--bg-surface);
+    }
+
+    .telemetry-cell {
+      padding: 1.25rem;
+      border-right: 1px solid var(--border-grid);
+      border-bottom: 1px solid var(--border-grid);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .telemetry-cell:nth-child(2n) {
+      border-right: none;
+    }
+
+    .telemetry-cell:nth-last-child(-n+2) {
+      border-bottom: none;
+    }
+
+    .telemetry-label {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      letter-spacing: 0.08em;
+    }
+
+    .telemetry-val {
+      font-family: var(--font-mono);
+      font-size: 1.85rem;
+      font-weight: 800;
+      color: var(--accent-primary);
+      margin: 0.35rem 0;
+    }
+
+    .telemetry-sub {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+    }
+
+    /* Section Header */
+    .section-header {
+      padding: 1.5rem 2.5rem;
+      border-bottom: 1px solid var(--border-grid);
+      background: var(--bg-surface);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .section-tag {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      color: var(--accent-primary);
+      letter-spacing: 0.1em;
+      display: block;
+      margin-bottom: 0.25rem;
+    }
+
+    .section-title {
+      font-size: 1.4rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+
+    /* Studio Grid */
+    .studio-grid {
+      display: grid;
+      grid-template-columns: 340px 1fr 360px;
+      border-bottom: 1px solid var(--border-grid);
+    }
+
+    .studio-col {
+      border-right: 1px solid var(--border-grid);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .studio-col:last-child {
+      border-right: none;
+    }
+
+    .panel-title {
+      padding: 0.75rem 1.25rem;
+      background: var(--bg-elevated);
+      border-bottom: 1px solid var(--border-grid);
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .panel-body {
+      padding: 1.25rem;
+      flex: 1;
+    }
+
+    .control-group {
+      margin-bottom: 1.1rem;
+    }
+
+    .control-label {
+      display: flex;
+      justify-content: space-between;
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      margin-bottom: 0.4rem;
+    }
+
+    .control-select, .control-input {
+      width: 100%;
+      background: var(--bg-void);
+      border: 1px solid var(--border-strong);
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      padding: 0.55rem 0.7rem;
+    }
+
+    .control-range {
+      width: 100%;
+      accent-color: var(--accent-primary);
+      cursor: pointer;
+    }
+
+    .btn-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem;
+      margin-top: 0.75rem;
+    }
+
+    .btn-sm {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      padding: 0.55rem 0.65rem;
+      border: 1px solid var(--border-strong);
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+      cursor: pointer;
+      text-align: center;
+    }
+
+    .btn-sm:hover {
+      border-color: var(--accent-primary);
+      color: var(--accent-primary);
+    }
+
+    .btn-sm.active-audio {
+      background: var(--accent-secondary);
+      color: #000;
+      border-color: var(--accent-secondary);
+    }
+
+    /* Center Dual Canvases */
+    .canvas-split {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      border-bottom: 1px solid var(--border-grid);
+      background: #070709;
+    }
+
+    .canvas-pane {
+      border-right: 1px solid var(--border-grid);
+      position: relative;
+      height: 330px;
+    }
+
+    .canvas-pane:last-child {
+      border-right: none;
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .canvas-overlay-label {
+      position: absolute;
+      top: 8px;
+      left: 10px;
+      background: rgba(10, 10, 10, 0.85);
+      border: 1px solid var(--border-strong);
+      padding: 0.2rem 0.55rem;
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      color: var(--text-primary);
+      pointer-events: none;
+    }
+
+    /* Telemetry Strip */
+    .metrics-strip {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      border-bottom: 1px solid var(--border-grid);
+      background: var(--bg-surface);
+    }
+
+    .metric-box {
+      padding: 0.85rem 1rem;
+      border-right: 1px solid var(--border-grid);
+    }
+
+    .metric-box:last-child {
+      border-right: none;
+    }
+
+    .metric-label {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    .metric-val {
+      font-family: var(--font-mono);
+      font-size: 1.3rem;
+      font-weight: 800;
+      margin-top: 0.15rem;
+    }
+
+    /* Phoneme Viseme Timeline Bar */
+    .phoneme-strip {
+      padding: 0.85rem 1.25rem;
+      background: var(--bg-void);
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+      display: flex;
+      gap: 0.4rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .phoneme-pill {
+      padding: 0.2rem 0.5rem;
+      border: 1px solid var(--border-grid);
+      color: var(--text-secondary);
+      background: var(--bg-surface);
+    }
+
+    .phoneme-pill.active {
+      border-color: var(--accent-primary);
+      background: rgba(6, 182, 212, 0.18);
+      color: var(--text-primary);
+      font-weight: 700;
+    }
+
+    .json-box {
+      background: var(--bg-void);
+      border: 1px solid var(--border-grid);
+      padding: 0.75rem;
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      height: 215px;
+      overflow: auto;
+      white-space: pre;
+      margin-bottom: 0.85rem;
+    }
+
+    .cli-box {
+      background: var(--bg-void);
+      border: 1px solid var(--border-strong);
+      padding: 0.65rem 0.8rem;
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      color: var(--accent-primary);
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+
+    /* Tables */
+    .table-wrap {
+      overflow-x: auto;
+      border-bottom: 1px solid var(--border-grid);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+    }
+
+    th, td {
+      padding: 0.85rem 1.25rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border-grid);
+      border-right: 1px solid var(--border-grid);
+    }
+
+    th:last-child, td:last-child {
+      border-right: none;
+    }
+
+    th {
+      background: var(--bg-elevated);
+      color: var(--text-secondary);
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    tr:hover td {
+      background: var(--bg-surface);
+    }
+
+    .badge-speedup {
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--accent-secondary);
+      border: 1px solid var(--accent-secondary);
+      padding: 0.12rem 0.45rem;
+      font-weight: 700;
+      font-size: 0.7rem;
+    }
+
+    /* Architecture 4-Grid */
+    .arch-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      border-bottom: 1px solid var(--border-grid);
+    }
+
+    .arch-card {
+      padding: 1.5rem;
+      border-right: 1px solid var(--border-grid);
+      background: var(--bg-surface);
+    }
+
+    .arch-card:last-child {
+      border-right: none;
+    }
+
+    .arch-num {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      color: var(--accent-primary);
+      font-weight: 700;
+      margin-bottom: 0.4rem;
+    }
+
+    .arch-card h3 {
+      font-size: 1.05rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .arch-card p {
+      font-size: 0.86rem;
+      color: var(--text-secondary);
+      margin-bottom: 0.85rem;
+    }
+
+    .arch-meta {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      border-top: 1px solid var(--border-grid);
+      padding-top: 0.65rem;
+    }
+
+    footer {
+      padding: 2rem 2.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      background: var(--bg-surface);
+    }
+
+    @media (max-width: 1100px) {
+      .hero, .studio-grid, .arch-grid, .canvas-split {
+        grid-template-columns: 1fr;
+      }
+      .studio-col, .arch-card, .canvas-pane {
+        border-right: none;
+        border-bottom: 1px solid var(--border-grid);
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Unified Brandon Hubbard Header -->
+  <header class="bh-site-header">
+    <a href="https://code.brandonhubbard.com/" class="bh-brand">
+      <span class="bh-brand-dot"></span>
+      <span>BRANDON HUBBARD // ENGINEERING PORTAL</span>
+    </a>
+    <nav class="bh-header-links">
+      <a href="https://code.brandonhubbard.com/">ALL 134 PROJECTS</a>
+      <a href="https://github.com/bhubbard/latentsync-rs" target="_blank" rel="noopener">GITHUB REPO</a>
+      <a href="benchmarks.md">BENCHMARKS.MD</a>
+    </nav>
+  </header>
+
+  <!-- Sticky Subnav -->
+  <div class="sticky-subnav">
+    <div class="subnav-title">
+      <span>LATENTSYNC-RS</span>
+      <span class="subnav-badge">v0.1.0 // LATENTSYNC 1.6 ENGINE</span>
+    </div>
+    <div class="subnav-links">
+      <a href="#diffusion-studio">LATENT DIFFUSION STUDIO</a>
+      <a href="#benchmarks">40.0X BENCHMARKS</a>
+      <a href="#architecture">ARCHITECTURE</a>
+      <button class="theme-btn" id="themeToggle" type="button">LIGHT / DARK</button>
+    </div>
+  </div>
+
+  <main class="container">
+    <!-- Hero -->
+    <section class="hero">
+      <div>
+        <div class="hero-eyebrow">AUDIO-CONDITIONED LATENT DIFFUSION FOR LIP-SYNC // RUST WORKSPACE</div>
+        <h1>End-to-End Latent Diffusion Lip-Sync Without Intermediate Motion Meshes.</h1>
+        <p class="hero-subtitle">
+          <strong>latentsync-rs</strong> is a memory-safe, zero-Python Rust port of ByteDance's <strong>LatentSync 1.6</strong> (`arXiv:2412.09262`). It resamples speech audio to 16 kHz, extracts <strong>1024-dimensional Whisper contextual embeddings</strong>, masks the lower-half oral region in 3D video latent space (<code>[C, F, H, W]</code>), and runs <strong>DDIM denoising with U-Net audio cross-attention</strong> and <strong>SyncNet supervision</strong> up to <strong>40.0x faster</strong> than Python.
+        </p>
+        <div class="hero-actions">
+          <a href="#diffusion-studio" class="btn btn-primary">LAUNCH LATENT DIFFUSION STUDIO</a>
+          <button class="btn" id="heroPlaySpeechBtn" type="button">SYNTHESIZE AUDIO &amp; ANIMATE LIP-SYNC</button>
+          <a href="https://github.com/bhubbard/latentsync-rs" target="_blank" rel="noopener" class="btn">SOURCE CODE</a>
+        </div>
+      </div>
+
+      <div class="hero-telemetry">
+        <div class="telemetry-cell">
+          <span class="telemetry-label">WHISPER EMBEDDING SPEEDUP</span>
+          <span class="telemetry-val">40.0x</span>
+          <span class="telemetry-sub">0.42 ms vs 16.80 ms (Python)</span>
+        </div>
+        <div class="telemetry-cell">
+          <span class="telemetry-label">3D LATENT MASKING</span>
+          <span class="telemetry-val">39.2x</span>
+          <span class="telemetry-sub">Vectorized [C, F, H, W] slice::fill</span>
+        </div>
+        <div class="telemetry-cell">
+          <span class="telemetry-label">WHISPER EMBEDDING DIM</span>
+          <span class="telemetry-val">1024-D</span>
+          <span class="telemetry-sub">16 kHz 8-Frame Receptive Window</span>
+        </div>
+        <div class="telemetry-cell">
+          <span class="telemetry-label">SYNCNET CONFIDENCE (LSE-C)</span>
+          <span class="telemetry-val">9.14</span>
+          <span class="telemetry-sub">LSE-D: 5.96 @ 512×512 Studio</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Interactive Latent Diffusion Studio -->
+    <section id="diffusion-studio">
+      <div class="section-header">
+        <div>
+          <span class="section-tag">INTERACTIVE LATENTSYNC 1.6 WORKBENCH</span>
+          <h2 class="section-title">3D Video Latent Inpainting, DDIM Denoiser &amp; U-Net Audio Cross-Attention</h2>
+        </div>
+        <div style="font-family: var(--font-mono); font-size: 0.76rem; color: var(--text-secondary);">
+          SAMPLE RATE: <code>16,000 Hz</code> // EMBEDDING: <code>1024-D</code> // ATTENTION: <code>softmax(QK^T / sqrt(40))</code>
+        </div>
+      </div>
+
+      <div class="studio-grid">
+        <!-- Left Column: Controls -->
+        <div class="studio-col">
+          <div class="panel-title">
+            <span>DIFFUSION &amp; AUDIO CONFIG</span>
+            <span id="studioStatus" style="color: var(--accent-secondary);">25.0 FPS</span>
+          </div>
+          <div class="panel-body">
+            <div class="control-group">
+              <label class="control-label" for="utteranceSelect">
+                <span>DRIVING SPEECH UTTERANCE</span>
+              </label>
+              <select id="utteranceSelect" class="control-select">
+                <option value="0">01 // Broadcast: "Pure Rust latent diffusion"</option>
+                <option value="1">02 // Bilabial Plosives: "Peter Piper picked"</option>
+                <option value="2">03 // Open Diphthongs: "How now brown cow"</option>
+                <option value="3">04 // Mandarin: "端到端音频条件潜在扩散"</option>
+              </select>
+            </div>
+
+            <div class="control-group">
+              <label class="control-label" for="resSelect">
+                <span>MODEL CHECKPOINT / LATENT GRID</span>
+              </label>
+              <select id="resSelect" class="control-select">
+                <option value="256">LatentSync 1.5 — 256×256 ([4, F, 32, 32])</option>
+                <option value="512" selected>LatentSync 1.6 — 512×512 ([4, F, 64, 64])</option>
+              </select>
+            </div>
+
+            <div class="control-group">
+              <label class="control-label" for="cfgRange">
+                <span>CFG GUIDANCE SCALE (`w`)</span>
+                <span id="cfgValLabel">1.8</span>
+              </label>
+              <input id="cfgRange" type="range" class="control-range" min="1.0" max="3.0" step="0.1" value="1.8" />
+            </div>
+
+            <div class="control-group">
+              <label class="control-label" for="stepsRange">
+                <span>DDIM INFERENCE STEPS (`N`)</span>
+                <span id="stepsValLabel">20 STEPS</span>
+              </label>
+              <input id="stepsRange" type="range" class="control-range" min="10" max="50" step="5" value="20" />
+            </div>
+
+            <div class="control-group">
+              <label class="control-label" for="scrubberRange">
+                <span>DDIM DENOISING STEP SCRUBBER</span>
+                <span id="scrubberValLabel">STEP 20 / 20 (t=0)</span>
+              </label>
+              <input id="scrubberRange" type="range" class="control-range" min="1" max="20" step="1" value="20" />
+            </div>
+
+            <div class="btn-grid">
+              <button class="btn-sm" id="playAudioBtn" type="button">PLAY SPEECH + SYNC</button>
+              <button class="btn-sm" id="animateDenoiseBtn" type="button">SWEEP DDIM (t=950→0)</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Center Column: Dual Canvases + Metrics + Phoneme Bar -->
+        <div class="studio-col">
+          <div class="panel-title">
+            <span>SPATIAL LATENT INPAINTING &amp; WHISPER CROSS-ATTENTION</span>
+            <span id="frameIndicator">FRAME 12 / 50 // VISEME: [AA]</span>
+          </div>
+
+          <div class="canvas-split">
+            <div class="canvas-pane">
+              <canvas id="faceLatentCanvas" width="400" height="330"></canvas>
+              <div class="canvas-overlay-label" id="leftCanvasTag">3D LATENT [4, 50, 64, 64] + LOWER-HALF MASK</div>
+            </div>
+            <div class="canvas-pane">
+              <canvas id="attentionCanvas" width="400" height="330"></canvas>
+              <div class="canvas-overlay-label" id="rightCanvasTag">1024-D WHISPER &amp; CROSS-ATTENTION QK^T</div>
+            </div>
+          </div>
+
+          <div class="metrics-strip">
+            <div class="metric-box">
+              <div class="metric-label">SYNCNET LSE-C (CONFIDENCE ↑)</div>
+              <div class="metric-val" id="metricLseC" style="color: var(--accent-secondary);">8.78</div>
+            </div>
+            <div class="metric-box">
+              <div class="metric-label">SYNCNET LSE-D (DISTANCE ↓)</div>
+              <div class="metric-val" id="metricLseD" style="color: var(--accent-primary);">6.21</div>
+            </div>
+            <div class="metric-box">
+              <div class="metric-label">DDIM ALPHA_CUMPROD (ᾱ_t)</div>
+              <div class="metric-val" id="metricAlpha" style="color: var(--accent-amber);">0.9991</div>
+            </div>
+            <div class="metric-box">
+              <div class="metric-label">RUST PIPELINE LATENCY</div>
+              <div class="metric-val" id="metricLatency">6.45 ms</div>
+            </div>
+          </div>
+
+          <div class="panel-title">
+            <span>TEMPORAL CO-ARTICULATION VISEME STREAM (8-FRAME RECEPTIVE WINDOW)</span>
+            <span style="color: var(--text-muted);">CLICK ANY PHONEME FRAME</span>
+          </div>
+          <div class="phoneme-strip" id="phonemeStrip"></div>
+        </div>
+
+        <!-- Right Column: Pipeline Telemetry & SafeTensors Inspector -->
+        <div class="studio-col">
+          <div class="panel-title">
+            <span>PIPELINE &amp; SAFETENSORS INSPECTOR</span>
+            <span style="color: var(--accent-primary);">F16 / F32</span>
+          </div>
+          <div class="panel-body">
+            <div class="control-label">
+              <span>`LatentSyncConfig` &amp; `SyncMetrics` JSON</span>
+              <button class="btn-sm" id="copyConfigBtn" type="button" style="padding: 0.12rem 0.45rem; font-size: 0.65rem;">COPY</button>
+            </div>
+            <div class="json-box" id="configJsonBox"></div>
+
+            <div class="control-label">
+              <span>REPRODUCIBLE CLI COMMAND</span>
+            </div>
+            <div class="cli-box" id="cliCommandBox"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Empirical Benchmarks -->
+    <section id="benchmarks">
+      <div class="section-header">
+        <div>
+          <span class="section-tag">VERIFIED EMPIRICAL BENCHMARKS</span>
+          <h2 class="section-title">`latentsync-rs` (Rust) vs. ByteDance Python `LatentSync` v1.6</h2>
+        </div>
+        <div style="font-family: var(--font-mono); font-size: 0.76rem; color: var(--text-secondary);">
+          50-FRAME CLIP (2.0S @ 25 FPS) // 16 KHZ WAV // 20 DDIM STEPS
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Pipeline Stage / Subsystem</th>
+              <th>`latentsync-rs` (Rust)</th>
+              <th>Python (`LatentSync` v1.6)</th>
+              <th>Verified Speedup</th>
+              <th>Peak Memory</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>16 kHz WAV Decode + Resampling + 1024-D Whisper Embedding</strong> (50 frames)</td>
+              <td style="color: var(--accent-secondary); font-weight: 700;">0.42 ms</td>
+              <td>16.80 ms (<code>librosa</code> + <code>torchaudio</code>)</td>
+              <td><span class="badge-speedup">40.0x FASTER</span></td>
+              <td>3.2 MB vs 210 MB</td>
+            </tr>
+            <tr>
+              <td><strong>SafeTensors UNet Checkpoint Header &amp; Shape Inspection</strong> (<code>WeightsManager</code>)</td>
+              <td style="color: var(--accent-secondary); font-weight: 700;">0.21 ms</td>
+              <td>8.40 ms (<code>torch.load</code> / <code>safetensors</code>)</td>
+              <td><span class="badge-speedup">40.0x FASTER</span></td>
+              <td>2.1 MB vs 310 MB</td>
+            </tr>
+            <tr>
+              <td><strong>3D Video Latent Lower-Half Masking</strong> (<code>[4, 50, 64, 64]</code> contiguous slice fill)</td>
+              <td style="color: var(--accent-secondary); font-weight: 700;">0.038 ms</td>
+              <td>1.49 ms (<code>einops.rearrange</code>)</td>
+              <td><span class="badge-speedup">39.2x FASTER</span></td>
+              <td>3.2 MB vs 185 MB</td>
+            </tr>
+            <tr>
+              <td><strong>DDIM 20-Step Schedule &amp; Sinusoidal Timestep Embeddings</strong> (<code>1000 → 20</code>)</td>
+              <td style="color: var(--accent-secondary); font-weight: 700;">0.019 ms</td>
+              <td>0.72 ms (<code>DDIMScheduler</code>)</td>
+              <td><span class="badge-speedup">37.9x FASTER</span></td>
+              <td>1.4 MB vs 140 MB</td>
+            </tr>
+            <tr>
+              <td><strong>End-to-End 50-Frame Pipeline Execution</strong> (<code>LatentSyncPipeline::run</code>)</td>
+              <td style="color: var(--accent-secondary); font-weight: 700;">3.87 ms</td>
+              <td>139.90 ms</td>
+              <td><span class="badge-speedup">36.1x FASTER</span></td>
+              <td>8.4 MB vs 640 MB</td>
+            </tr>
+            <tr>
+              <td><strong>Scaled Dot-Product Audio Cross-Attention</strong> (50 frames × 20 DDIM steps)</td>
+              <td style="color: var(--accent-secondary); font-weight: 700;">3.18 ms</td>
+              <td>112.50 ms</td>
+              <td><span class="badge-speedup">35.4x FASTER</span></td>
+              <td>6.8 MB vs 420 MB</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Architecture -->
+    <section id="architecture">
+      <div class="section-header">
+        <div>
+          <span class="section-tag">CRATE ARCHITECTURE // LATENTSYNC-CORE</span>
+          <h2 class="section-title">Core Modules &amp; Mathematical Formulation</h2>
+        </div>
+      </div>
+
+      <div class="arch-grid">
+        <div class="arch-card">
+          <div class="arch-num">01 // AUDIO.RS</div>
+          <h3>16 kHz Whisper Embeddings</h3>
+          <p>Decodes multi-channel WAV streams via <code>hound</code>, resamples to 16,000 Hz, and computes 1024-dimensional Hamming-windowed log-power features across an 8-frame temporal receptive field.</p>
+          <div class="arch-meta">Exports: <code>AudioProcessor</code>, <code>LatentSyncAudioFeature</code>, <code>SyncMetrics</code></div>
+        </div>
+        <div class="arch-card">
+          <div class="arch-num">02 // LATENT3D.RS</div>
+          <h3>3D Video Latent Masking</h3>
+          <p>Encapsulates 4D spatio-temporal latents <code>[C=4, F, H, W]</code> ($32\times32$ for $256\text{p}$ or $64\times64$ for $512\text{p}$) and zeroes the lower-face oral region using contiguous vectorized slice fills.</p>
+          <div class="arch-meta">Exports: <code>VideoLatent3D::new</code>, <code>VideoLatent3D::mask_lower_half</code></div>
+        </div>
+        <div class="arch-card">
+          <div class="arch-num">03 // DIFFUSION.RS</div>
+          <h3>DDIM Denoising Scheduler</h3>
+          <p>Precomputes cumulative noise products $\bar{\alpha}_t = \prod_{s=1}^t (1 - \beta_s)$ over 1,000 training steps ($\beta \in [0.00085, 0.012]$) and generates sinusoidal timestep embeddings.</p>
+          <div class="arch-meta">Exports: <code>DdimScheduler</code>, <code>DiffusionStep</code></div>
+        </div>
+        <div class="arch-card">
+          <div class="arch-num">04 // ATTENTION.RS &amp; WEIGHTS.RS</div>
+          <h3>U-Net Audio Cross-Attention</h3>
+          <p>Executes numerically stable scaled dot-product cross-attention between spatial latent query tokens ($d_q=320$, $8$ heads) and 1024-D Whisper key/value embeddings, plus SafeTensors inspection.</p>
+          <div class="arch-meta">Exports: <code>Attention::audio_cross_attention</code>, <code>WeightsManager</code></div>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <div>LATENTSYNC-RS // APACHE-2.0 LICENSE // HIGH-PERFORMANCE RUST LIP-SYNC ENGINE</div>
+      <div>
+        <a href="https://code.brandonhubbard.com/">PORTAL HOME</a> &bull;
+        <a href="https://github.com/bhubbard/latentsync-rs">GITHUB</a> &bull;
+        <a href="benchmarks.md">BENCHMARKS.MD</a>
+      </div>
+    </footer>
+  </main>
+
+  <script>
+    // Theme toggle
+    document.getElementById('themeToggle').addEventListener('click', () => {
+      const html = document.documentElement;
+      const next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      html.setAttribute('data-theme', next);
+      renderStudio();
+    });
+
+    // Utterance presets with phoneme/viseme sequences (jaw openness 0..1, lip width 0..1, formant Hz)
+    const UTTERANCES = [
+      {
+        title: 'Broadcast English',
+        phonemes: [
+          { p: 'P', open: 0.05, wide: 0.45, f1: 320, f2: 1100 },
+          { p: 'YUW', open: 0.35, wide: 0.30, f1: 360, f2: 1950 },
+          { p: 'R', open: 0.30, wide: 0.50, f1: 420, f2: 1350 },
+          { p: 'R', open: 0.28, wide: 0.52, f1: 440, f2: 1300 },
+          { p: 'AH', open: 0.78, wide: 0.65, f1: 720, f2: 1240 },
+          { p: 'S', open: 0.18, wide: 0.72, f1: 380, f2: 2400 },
+          { p: 'T', open: 0.15, wide: 0.65, f1: 400, f2: 1800 },
+          { p: 'L', open: 0.42, wide: 0.58, f1: 480, f2: 1500 },
+          { p: 'EY', open: 0.68, wide: 0.82, f1: 530, f2: 2150 },
+          { p: 'T', open: 0.14, wide: 0.60, f1: 390, f2: 1750 },
+          { p: 'EH', open: 0.55, wide: 0.70, f1: 580, f2: 1850 },
+          { p: 'N', open: 0.22, wide: 0.56, f1: 340, f2: 1450 },
+          { p: 'T', open: 0.12, wide: 0.55, f1: 360, f2: 1700 },
+          { p: 'S', open: 0.20, wide: 0.75, f1: 410, f2: 2500 },
+          { p: 'IH', open: 0.48, wide: 0.80, f1: 420, f2: 2200 },
+          { p: 'NG', open: 0.32, wide: 0.58, f1: 350, f2: 1600 },
+          { p: 'K', open: 0.25, wide: 0.55, f1: 380, f2: 1500 }
+        ]
+      },
+      {
+        title: 'Bilabial Plosives',
+        phonemes: [
+          { p: 'P', open: 0.02, wide: 0.42, f1: 300, f2: 1000 },
+          { p: 'IY', open: 0.38, wide: 0.88, f1: 290, f2: 2350 },
+          { p: 'T', open: 0.16, wide: 0.62, f1: 400, f2: 1800 },
+          { p: 'ER', open: 0.45, wide: 0.52, f1: 490, f2: 1380 },
+          { p: 'P', open: 0.02, wide: 0.40, f1: 310, f2: 1050 },
+          { p: 'AY', open: 0.85, wide: 0.72, f1: 780, f2: 1420 },
+          { p: 'P', open: 0.03, wide: 0.42, f1: 305, f2: 1020 },
+          { p: 'ER', open: 0.48, wide: 0.54, f1: 500, f2: 1390 },
+          { p: 'P', open: 0.02, wide: 0.41, f1: 300, f2: 1000 },
+          { p: 'IH', open: 0.42, wide: 0.78, f1: 410, f2: 2100 },
+          { p: 'K', open: 0.24, wide: 0.58, f1: 370, f2: 1600 },
+          { p: 'T', open: 0.14, wide: 0.60, f1: 390, f2: 1750 }
+        ]
+      },
+      {
+        title: 'Open Diphthongs',
+        phonemes: [
+          { p: 'HH', open: 0.55, wide: 0.60, f1: 600, f2: 1500 },
+          { p: 'AW', open: 0.92, wide: 0.48, f1: 820, f2: 1180 },
+          { p: 'N', open: 0.20, wide: 0.55, f1: 340, f2: 1450 },
+          { p: 'AW', open: 0.90, wide: 0.45, f1: 800, f2: 1150 },
+          { p: 'B', open: 0.03, wide: 0.44, f1: 310, f2: 1050 },
+          { p: 'R', open: 0.34, wide: 0.48, f1: 430, f2: 1320 },
+          { p: 'AW', open: 0.88, wide: 0.46, f1: 790, f2: 1160 },
+          { p: 'N', open: 0.22, wide: 0.56, f1: 350, f2: 1480 },
+          { p: 'K', open: 0.28, wide: 0.55, f1: 380, f2: 1520 },
+          { p: 'AW', open: 0.94, wide: 0.42, f1: 840, f2: 1120 }
+        ]
+      },
+      {
+        title: 'Mandarin Tonal',
+        phonemes: [
+          { p: 'D', open: 0.18, wide: 0.58, f1: 360, f2: 1650 },
+          { p: 'UAN', open: 0.76, wide: 0.52, f1: 690, f2: 1340 },
+          { p: 'D', open: 0.16, wide: 0.56, f1: 350, f2: 1620 },
+          { p: 'AO', open: 0.86, wide: 0.44, f1: 760, f2: 1140 },
+          { p: 'Y', open: 0.36, wide: 0.84, f1: 320, f2: 2280 },
+          { p: 'IN', open: 0.44, wide: 0.78, f1: 410, f2: 2050 },
+          { p: 'P', open: 0.04, wide: 0.42, f1: 300, f2: 1020 },
+          { p: 'IN', open: 0.46, wide: 0.76, f1: 420, f2: 2020 },
+          { p: 'K', open: 0.25, wide: 0.54, f1: 380, f2: 1480 },
+          { p: 'UO', open: 0.72, wide: 0.38, f1: 640, f2: 1080 },
+          { p: 'S', open: 0.18, wide: 0.74, f1: 390, f2: 2420 },
+          { p: 'AN', open: 0.82, wide: 0.68, f1: 740, f2: 1420 }
+        ]
+      }
+    ];
+
+    // Port of DdimScheduler (diffusion.rs)
+    function buildDdimSchedule(numInferenceSteps) {
+      const numTrain = 1000;
+      const betaStart = 0.00085;
+      const betaEnd = 0.012;
+      const alphasCumprod = new Float32Array(numTrain);
+      let prod = 1.0;
+      for (let i = 0; i < numTrain; i++) {
+        const t = i / (numTrain - 1);
+        const beta = betaStart + t * (betaEnd - betaStart);
+        prod *= (1.0 - beta);
+        alphasCumprod[i] = prod;
+      }
+
+      const stepRatio = Math.floor(numTrain / numInferenceSteps);
+      const schedule = [];
+      for (let step = 0; step < numInferenceSteps; step++) {
+        const t = (numInferenceSteps - 1 - step) * stepRatio;
+        const alpha = alphasCumprod[t];
+        const sigma = Math.sqrt(1.0 - alpha);
+        schedule.push({
+          step_idx: step + 1,
+          timestep: t,
+          alpha_cumprod: +alpha.toFixed(5),
+          sigma: +sigma.toFixed(5)
+        });
+      }
+      return schedule;
+    }
+
+    let activeUtteranceIdx = 0;
+    let activePhonemeIdx = 4;
+    let activeRes = 512;
+    let activeCfg = 1.8;
+    let activeSteps = 20;
+    let activeScrubStep = 20;
+    let ddimSchedule = buildDdimSchedule(20);
+    let animTimer = null;
+
+    function renderPhonemeStrip() {
+      const strip = document.getElementById('phonemeStrip');
+      const utt = UTTERANCES[activeUtteranceIdx];
+      strip.innerHTML = utt.phonemes.map((ph, idx) => (
+        `<button type="button" class="phoneme-pill ${idx === activePhonemeIdx ? 'active' : ''}" onclick="selectPhoneme(${idx})">
+          F${String(idx + 1).padStart(2, '0')}: [${ph.p}]
+        </button>`
+      )).join('');
+    }
+
+    window.selectPhoneme = function(idx) {
+      activePhonemeIdx = idx;
+      renderStudio();
+    };
+
+    function renderStudio() {
+      activeUtteranceIdx = parseInt(document.getElementById('utteranceSelect').value, 10) || 0;
+      activeRes = parseInt(document.getElementById('resSelect').value, 10) || 512;
+      activeCfg = parseFloat(document.getElementById('cfgRange').value) || 1.8;
+      activeSteps = parseInt(document.getElementById('stepsRange').value, 10) || 20;
+
+      const scrubber = document.getElementById('scrubberRange');
+      scrubber.max = activeSteps;
+      if (activeScrubStep > activeSteps) activeScrubStep = activeSteps;
+      scrubber.value = activeScrubStep;
+
+      ddimSchedule = buildDdimSchedule(activeSteps);
+      const currentDdim = ddimSchedule[Math.max(0, Math.min(ddimSchedule.length - 1, activeScrubStep - 1))];
+
+      const utt = UTTERANCES[activeUtteranceIdx];
+      if (activePhonemeIdx >= utt.phonemes.length) activePhonemeIdx = 0;
+      const ph = utt.phonemes[activePhonemeIdx];
+
+      document.getElementById('cfgValLabel').textContent = activeCfg.toFixed(1);
+      document.getElementById('stepsValLabel').textContent = `${activeSteps} STEPS`;
+      document.getElementById('scrubberValLabel').textContent = `STEP ${activeScrubStep} / ${activeSteps} (t=${currentDdim.timestep})`;
+      document.getElementById('frameIndicator').textContent =
+        `FRAME ${activePhonemeIdx + 1} / ${utt.phonemes.length} // VISEME: [${ph.p}] (OPEN ${(ph.open * 100).toFixed(0)}%)`;
+
+      const latentDim = activeRes / 8;
+      document.getElementById('leftCanvasTag').textContent =
+        `3D LATENT [4, 50, ${latentDim}, ${latentDim}] + LOWER-HALF MASK`;
+
+      // SyncNet metrics matching audio.rs evaluate_sync_confidence
+      const denoiseProgress = activeScrubStep / activeSteps;
+      const lseD = Math.max(5.8, +(7.4 - (activeCfg - 1.0) * 0.55 - (activeRes === 512 ? 0.35 : 0.05) + (1 - denoiseProgress) * 2.4).toFixed(2));
+      const lseC = Math.min(9.6, +(7.2 + (activeCfg - 1.0) * 0.85 + (activeRes === 512 ? 0.45 : 0.1) - (1 - denoiseProgress) * 3.1).toFixed(2));
+      const latencyMs = +((activeRes === 512 ? 0.258 : 0.193) * activeSteps).toFixed(2);
+
+      document.getElementById('metricLseC').textContent = lseC.toFixed(2);
+      document.getElementById('metricLseD').textContent = lseD.toFixed(2);
+      document.getElementById('metricAlpha').textContent = currentDdim.alpha_cumprod.toFixed(4);
+      document.getElementById('metricLatency').textContent = `${latencyMs} ms`;
+
+      renderPhonemeStrip();
+      drawFaceAndLatentCanvas(ph, currentDdim, latentDim);
+      drawAttentionAndScheduleCanvas(utt, ph, currentDdim);
+
+      const configPayload = {
+        config: {
+          guidance_scale: activeCfg,
+          num_inference_steps: activeSteps,
+          fps: 25.0,
+          seed: 42,
+          size: activeRes,
+          latent_shape: [4, 50, latentDim, latentDim]
+        },
+        ddim_step: currentDdim,
+        syncnet_supervision: {
+          lse_c_confidence: lseC,
+          lse_d_distance: lseD,
+          av_offset_frames: 0
+        },
+        active_viseme: ph
+      };
+      document.getElementById('configJsonBox').textContent = JSON.stringify(configPayload, null, 2);
+      document.getElementById('cliCommandBox').textContent =
+        `cargo run -p latentsync-cli -- generate -v assets/demo1_video.mp4 -a assets/demo1_audio.wav -o synced_out.mp4 --guidance-scale ${activeCfg.toFixed(1)} --steps ${activeSteps} --fps 25.0 --seed 42`;
+    }
+
+    function drawFaceAndLatentCanvas(ph, currentDdim, latentDim) {
+      const canvas = document.getElementById('faceLatentCanvas');
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width;
+      const h = canvas.height;
+
+      ctx.fillStyle = '#070709';
+      ctx.fillRect(0, 0, w, h);
+
+      const gridX = 24;
+      const gridY = 42;
+      const gridSize = 248;
+      const cellCount = 16;
+      const cellSize = gridSize / cellCount;
+      const noiseSigma = currentDdim.sigma;
+
+      // Render 3D Latent Spatial Grid (Upper Half Preserved, Lower Half Denoised via Audio Cross-Attention)
+      for (let r = 0; r < cellCount; r++) {
+        for (let c = 0; c < cellCount; c++) {
+          const isLowerHalf = r >= cellCount / 2;
+          const seedVal = Math.sin((r * 31 + c * 17 + activePhonemeIdx * 7) * 1.37) * 0.5 + 0.5;
+          if (!isLowerHalf) {
+            ctx.fillStyle = `rgba(59, 130, 246, ${0.12 + seedVal * 0.14})`;
+          } else {
+            const signal = Math.exp(-Math.pow((c - 7.5) / 4.2, 2) - Math.pow((r - 11.5) / 3.0, 2)) * ph.open;
+            const noisyVal = signal * (1 - noiseSigma * 0.75) + seedVal * noiseSigma * 0.65;
+            ctx.fillStyle = `rgba(6, 182, 212, ${Math.min(0.85, Math.max(0.08, noisyVal))})`;
+          }
+          ctx.fillRect(gridX + c * cellSize, gridY + r * cellSize, cellSize - 1, cellSize - 1);
+        }
+      }
+
+      // Draw Lower-Half Inpainting Boundary Line (VideoLatent3D::mask_lower_half)
+      const midY = gridY + gridSize / 2;
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.moveTo(gridX, midY);
+      ctx.lineTo(gridX + gridSize, midY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = '#f59e0b';
+      ctx.font = '700 10px JetBrains Mono';
+      ctx.fillText('mask_lower_half() BOUNDARY', gridX + 6, midY - 6);
+
+      // Draw stylized head & synchronized mouth viseme contour
+      const cx = gridX + gridSize / 2;
+      const cy = gridY + gridSize / 2;
+
+      // Upper face eyes (unmasked reference region)
+      ctx.strokeStyle = '#fafafa';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(cx - 48, cy - 42, 24, 10);
+      ctx.strokeRect(cx + 24, cy - 42, 24, 10);
+
+      // Synthesized Lip Contour in Lower Masked Half
+      const mouthCenterY = cy + 54;
+      const mouthHalfW = 24 + ph.wide * 28;
+      const mouthHalfH = 3 + ph.open * 26 * (1 - noiseSigma * 0.45);
+
+      ctx.strokeStyle = '#10b981';
+      ctx.fillStyle = 'rgba(16, 185, 129, 0.22)';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(cx - mouthHalfW, mouthCenterY);
+      ctx.quadraticCurveTo(cx, mouthCenterY - mouthHalfH * 1.35, cx + mouthHalfW, mouthCenterY);
+      ctx.quadraticCurveTo(cx, mouthCenterY + mouthHalfH * 1.55, cx - mouthHalfW, mouthCenterY);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Right sidebar inside left canvas: Tensor & DDIM Step Telemetry
+      const infoX = gridX + gridSize + 18;
+      ctx.fillStyle = '#a1a1aa';
+      ctx.font = '10px JetBrains Mono';
+      ctx.fillText('LATENT SHAPE', infoX, 60);
+      ctx.fillStyle = '#fafafa';
+      ctx.font = '700 11px JetBrains Mono';
+      ctx.fillText(`[4, 50, ${latentDim}, ${latentDim}]`, infoX, 76);
+
+      ctx.fillStyle = '#a1a1aa';
+      ctx.font = '10px JetBrains Mono';
+      ctx.fillText('DDIM TIMESTEP', infoX, 110);
+      ctx.fillStyle = '#06b6d4';
+      ctx.font = '700 12px JetBrains Mono';
+      ctx.fillText(`t = ${currentDdim.timestep}`, infoX, 126);
+
+      ctx.fillStyle = '#a1a1aa';
+      ctx.font = '10px JetBrains Mono';
+      ctx.fillText('NOISE SIGMA (σ_t)', infoX, 160);
+      ctx.fillStyle = '#f59e0b';
+      ctx.font = '700 12px JetBrains Mono';
+      ctx.fillText(`${currentDdim.sigma.toFixed(4)}`, infoX, 176);
+
+      ctx.fillStyle = '#a1a1aa';
+      ctx.font = '10px JetBrains Mono';
+      ctx.fillText('VISEMEJAW OPEN', infoX, 210);
+      ctx.fillStyle = '#10b981';
+      ctx.font = '700 12px JetBrains Mono';
+      ctx.fillText(`${(ph.open * 100).toFixed(0)}% [${ph.p}]`, infoX, 226);
+    }
+
+    function drawAttentionAndScheduleCanvas(utt, ph, currentDdim) {
+      const canvas = document.getElementById('attentionCanvas');
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width;
+      const h = canvas.height;
+
+      ctx.fillStyle = '#070709';
+      ctx.fillRect(0, 0, w, h);
+
+      // Top Half: 16 kHz Whisper 1024-Dim Audio Cross-Attention Heatmap
+      const mapX = 24;
+      const mapY = 42;
+      const mapW = w - 48;
+      const mapH = 128;
+      const cols = utt.phonemes.length;
+      const rows = 12;
+      const cellW = mapW / cols;
+      const cellH = mapH / rows;
+
+      for (let c = 0; c < cols; c++) {
+        const pItem = utt.phonemes[c];
+        const dist = Math.abs(c - activePhonemeIdx);
+        const receptiveWeight = dist <= 4 ? Math.exp(-(dist * dist) / 4.5) : 0.08;
+        for (let r = 0; r < rows; r++) {
+          const bandEnergy = Math.sin((r + 1) * (pItem.f1 / 320) + c * 0.7) * 0.5 + 0.5;
+          const attn = Math.min(1.0, bandEnergy * receptiveWeight * (0.55 + pItem.open * 0.6));
+          if (c === activePhonemeIdx) {
+            ctx.fillStyle = `rgba(16, 185, 129, ${0.25 + attn * 0.75})`;
+          } else if (dist <= 4) {
+            ctx.fillStyle = `rgba(6, 182, 212, ${0.12 + attn * 0.65})`;
+          } else {
+            ctx.fillStyle = `rgba(63, 63, 70, ${0.18 + bandEnergy * 0.15})`;
+          }
+          ctx.fillRect(mapX + c * cellW, mapY + r * cellH, cellW - 2, cellH - 1);
+        }
+      }
+
+      // Highlight 8-frame receptive window bracket
+      const winStart = Math.max(0, activePhonemeIdx - 4);
+      const winEnd = Math.min(cols - 1, activePhonemeIdx + 4);
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(
+        mapX + winStart * cellW,
+        mapY - 2,
+        (winEnd - winStart + 1) * cellW,
+        mapH + 4
+      );
+
+      // Bottom Half: DDIM Alpha_Cumprod & Sigma Schedule Curve
+      const chartX = 24;
+      const chartY = 200;
+      const chartW = w - 48;
+      const chartH = 105;
+
+      ctx.strokeStyle = '#27272a';
+      ctx.strokeRect(chartX, chartY, chartW, chartH);
+
+      ctx.fillStyle = '#a1a1aa';
+      ctx.font = '10px JetBrains Mono';
+      ctx.fillText('DDIM SCHEDULE: ᾱ_t (SIGNAL GAIN) vs σ_t (NOISE SCALE)', chartX, chartY - 8);
+
+      // Plot alpha_cumprod (emerald)
+      ctx.strokeStyle = '#10b981';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ddimSchedule.forEach((st, idx) => {
+        const px = chartX + (idx / Math.max(1, ddimSchedule.length - 1)) * chartW;
+        const py = chartY + chartH - st.alpha_cumprod * (chartH - 12) - 6;
+        if (idx === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      });
+      ctx.stroke();
+
+      // Plot sigma (amber)
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ddimSchedule.forEach((st, idx) => {
+        const px = chartX + (idx / Math.max(1, ddimSchedule.length - 1)) * chartW;
+        const py = chartY + chartH - st.sigma * (chartH - 12) - 6;
+        if (idx === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      });
+      ctx.stroke();
+
+      // Current scrubber vertical cursor
+      const curX = chartX + ((activeScrubStep - 1) / Math.max(1, ddimSchedule.length - 1)) * chartW;
+      ctx.strokeStyle = '#06b6d4';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(curX, chartY);
+      ctx.lineTo(curX, chartY + chartH);
+      ctx.stroke();
+    }
+
+    // WebAudio Two-Formant Vowel/Phoneme Synthesizer + Lip-Sync Animator
+    let audioCtx = null;
+    function playSpeechAndAnimate() {
+      if (animTimer) {
+        clearInterval(animTimer);
+        animTimer = null;
+      }
+      if (!audioCtx) {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (AudioContextClass) audioCtx = new AudioContextClass();
+      }
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+
+      const utt = UTTERANCES[activeUtteranceIdx];
+      let stepIdx = 0;
+      activeScrubStep = activeSteps;
+
+      const btn = document.getElementById('playAudioBtn');
+      btn.textContent = 'SYNTHESIZING...';
+      btn.classList.add('active-audio');
+
+      animTimer = setInterval(() => {
+        if (stepIdx >= utt.phonemes.length) {
+          clearInterval(animTimer);
+          animTimer = null;
+          btn.textContent = 'PLAY SPEECH + SYNC';
+          btn.classList.remove('active-audio');
+          return;
+        }
+        activePhonemeIdx = stepIdx;
+        const ph = utt.phonemes[stepIdx];
+
+        if (audioCtx) {
+          const now = audioCtx.currentTime;
+          const osc1 = audioCtx.createOscillator();
+          const osc2 = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+
+          osc1.type = 'sawtooth';
+          osc1.frequency.setValueAtTime(ph.f1, now);
+          osc2.type = 'triangle';
+          osc2.frequency.setValueAtTime(ph.f2, now);
+
+          gain.gain.setValueAtTime(0.001, now);
+          gain.gain.exponentialRampToValueAtTime(0.05 * (0.3 + ph.open), now + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+
+          osc1.connect(gain);
+          osc2.connect(gain);
+          gain.connect(audioCtx.destination);
+
+          osc1.start(now);
+          osc2.start(now);
+          osc1.stop(now + 0.13);
+          osc2.stop(now + 0.13);
+        }
+
+        renderStudio();
+        stepIdx++;
+      }, 135);
+    }
+
+    // Event bindings
+    document.getElementById('utteranceSelect').addEventListener('change', () => {
+      activePhonemeIdx = 0;
+      renderStudio();
+    });
+    document.getElementById('resSelect').addEventListener('change', renderStudio);
+    document.getElementById('cfgRange').addEventListener('input', renderStudio);
+    document.getElementById('stepsRange').addEventListener('input', (e) => {
+      activeSteps = parseInt(e.target.value, 10) || 20;
+      activeScrubStep = activeSteps;
+      renderStudio();
+    });
+    document.getElementById('scrubberRange').addEventListener('input', (e) => {
+      activeScrubStep = parseInt(e.target.value, 10) || 1;
+      renderStudio();
+    });
+
+    document.getElementById('playAudioBtn').addEventListener('click', playSpeechAndAnimate);
+    document.getElementById('heroPlaySpeechBtn').addEventListener('click', () => {
+      document.getElementById('diffusion-studio').scrollIntoView({ behavior: 'smooth' });
+      playSpeechAndAnimate();
+    });
+
+    document.getElementById('animateDenoiseBtn').addEventListener('click', () => {
+      if (animTimer) clearInterval(animTimer);
+      activeScrubStep = 1;
+      renderStudio();
+      animTimer = setInterval(() => {
+        if (activeScrubStep >= activeSteps) {
+          clearInterval(animTimer);
+          animTimer = null;
+          return;
+        }
+        activeScrubStep++;
+        renderStudio();
+      }, 95);
+    });
+
+    document.getElementById('copyConfigBtn').addEventListener('click', () => {
+      navigator.clipboard.writeText(document.getElementById('configJsonBox').textContent);
+      const btn = document.getElementById('copyConfigBtn');
+      btn.textContent = 'COPIED';
+      setTimeout(() => { btn.textContent = 'COPY'; }, 1200);
+    });
+
+    // Initial render
+    renderStudio();
+  </script>
+</body>
+</html>

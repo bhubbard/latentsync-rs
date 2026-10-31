@@ -24,16 +24,14 @@ impl VideoLatent3D {
     /// Zero out lower face area across all frames in video latent
     pub fn mask_lower_half(&mut self) {
         let mid_h = self.height / 2;
+        let frame_stride = self.height * self.width;
+        let mask_start_offset = mid_h * self.width;
         for c in 0..self.channels {
             for f in 0..self.frames {
-                for h in mid_h..self.height {
-                    for w in 0..self.width {
-                        let idx = ((c * self.frames + f) * self.height + h) * self.width + w;
-                        if idx < self.data.len() {
-                            self.data[idx] = 0.0;
-                        }
-                    }
-                }
+                let frame_base = (c * self.frames + f) * frame_stride;
+                let start = (frame_base + mask_start_offset).min(self.data.len());
+                let end = (frame_base + frame_stride).min(self.data.len());
+                self.data[start..end].fill(0.0);
             }
         }
     }

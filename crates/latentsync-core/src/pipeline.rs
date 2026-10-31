@@ -76,11 +76,11 @@ impl LatentSyncPipeline {
                 let _attended = Attention::audio_cross_attention(&frame_slice, audio_emb, spatial_size, 1);
 
                 // Denoising update step
-                let alpha = step.alpha_cumprod;
+                let alpha_sqrt = step.alpha_cumprod.sqrt();
                 for c in 0..latent.channels {
                     let idx = ((c * latent.frames + frame_idx) * latent.height) * latent.width;
                     if idx < latent.data.len() {
-                        latent.data[idx] = latent.data[idx] * alpha.sqrt();
+                        latent.data[idx] *= alpha_sqrt;
                     }
                 }
             }

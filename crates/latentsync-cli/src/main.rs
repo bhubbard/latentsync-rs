@@ -165,10 +165,17 @@ fn main() -> Result<()> {
             let schedule = scheduler.get_inference_schedule(steps);
             let mut latent = latentsync_core::VideoLatent3D::new(4, frames, 32, 32);
             latent.mask_lower_half();
+            let video_tokens = vec![0.1f32; 1024];
+            let audio_tokens = vec![0.5f32; 1024];
 
             for _step in &schedule {
                 for _f in 0..frames {
-                    let _emb = latentsync_core::Attention::audio_cross_attention(&vec![0.1; 1024], &vec![0.5; 1024], 16, 64);
+                    let _emb = latentsync_core::Attention::audio_cross_attention(
+                        &video_tokens,
+                        &audio_tokens,
+                        16,
+                        64,
+                    );
                 }
             }
 

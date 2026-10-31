@@ -29,7 +29,7 @@ fn test_ddim_scheduler_timesteps() {
 
     // Alpha values should be within [0.0, 1.0]
     for &alpha in &scheduler.alphas_cumprod {
-        assert!(alpha >= 0.0 && alpha <= 1.0);
+        assert!((0.0..=1.0).contains(&alpha));
     }
 }
 
@@ -64,7 +64,7 @@ fn test_latent3d_dimensions_and_masking() {
     // Top row (h=0) unmasked
     assert_eq!(latent.data[0], 1.0);
     // Bottom row (h=20) masked
-    let bottom_idx = ((0 * 16 + 0) * 32 + 20) * 32 + 0;
+    let bottom_idx = 20 * 32;
     assert_eq!(latent.data[bottom_idx], 0.0);
 }
 

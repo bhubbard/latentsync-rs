@@ -9,7 +9,10 @@ pub mod pipeline;
 pub mod weights;
 
 pub use attention::{Attention, AttentionConfig};
-pub use audio::{AudioProcessor, LatentSyncAudioFeature, LATENTSYNC_EMBED_DIM, LATENTSYNC_SAMPLE_RATE};
+pub use audio::{
+    AudioProcessor, LatentSyncAudioFeature, SyncMetrics, LATENTSYNC_EMBED_DIM,
+    LATENTSYNC_SAMPLE_RATE,
+};
 pub use config::LatentSyncConfig;
 pub use diffusion::{DdimScheduler, DiffusionStep};
 pub use latent3d::VideoLatent3D;
